@@ -22,6 +22,7 @@
     </Compile>
     <Content Include="DafnyRuntime.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="DafnyRuntime.go" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="DafnyRuntime.rs" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="DafnyRuntime.h" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="DafnyRuntimeJava\build\libs\DafnyRuntime.jar" Link="DafnyRuntime.jar" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

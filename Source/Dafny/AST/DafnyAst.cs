@@ -3298,6 +3298,8 @@ namespace Microsoft.Dafny {
           return JavaCompiler.PublicIdProtect(name);
         case DafnyOptions.CompilationTarget.Cpp:
           return CppCompiler.PublicIdProtect(name);
+        case DafnyOptions.CompilationTarget.Rs:
+          return RustCompiler.PublicIdProtect(name);
         default:
           Contract.Assert(false);  // unexpected compile target
           return name;

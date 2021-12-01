@@ -61,7 +61,7 @@ namespace Microsoft.Dafny {
     public List<string> DafnyPrintExportedViews = new List<string>();
     public bool Compile = true;
     [Flags]
-    public enum CompilationTarget { Csharp = 1, JavaScript = 2, Go = 4, Java = 8, Cpp = 16, Php = 32 }
+    public enum CompilationTarget { Csharp = 1, JavaScript = 2, Go = 4, Java = 8, Cpp = 16, Php = 32, Rs = 64 }
     public CompilationTarget CompileTarget = CompilationTarget.Csharp;
     public bool CompileVerbose = true;
     public string DafnyPrintCompiledFile = null;
@@ -176,6 +176,8 @@ namespace Microsoft.Dafny {
               CompileTarget = CompilationTarget.Java;
             } else if (args[ps.i].Equals("cpp")) {
               CompileTarget = CompilationTarget.Cpp;
+            } else if (args[ps.i].Equals("rs")) {
+              CompileTarget = CompilationTarget.Rs;
             } else if (args[ps.i].Equals("php")) {
               CompileTarget = CompilationTarget.Php;
             } else {
@@ -733,6 +735,7 @@ $@"
     java - Compilation to Java
     cpp - Compilation to C++
     php - Compilation to PHP
+    rs - Compilation to Rust
 
     Note that the C++ backend has various limitations (see Docs/Compilation/Cpp.md).
     This includes lack of support for BigIntegers (aka int), most higher order
