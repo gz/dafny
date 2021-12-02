@@ -40,24 +40,22 @@ namespace Microsoft.Dafny {
     private string MainModuleName;
     private static List<Import> StandardImports =
       new List<Import> {
-        new Import { Name = "dafny", Path = "dafny" },
+        new Import { Name = "dafny", Path = "dafnyrt" },
       };
     private static string DummyTypeName = "Dummy__";
 
     private struct Import {
       public string Name, Path;
-      public bool SuppressDummy;
     }
 
     protected override void EmitHeader(Program program, ConcreteSyntaxTree wr) {
       wr.WriteLine("// Dafny program {0} compiled into Rust", program.Name);
 
       ModuleName = MainModuleName = program.MainMethod != null ? "main" : Path.GetFileNameWithoutExtension(program.Name);
-
-      wr.WriteLine("package {0}", ModuleName);
       wr.WriteLine();
+
       // Keep the import writers so that we can import subsequent modules into the main one
-      EmitImports(wr, out RootImportWriter, out RootImportDummyWriter);
+      EmitImports(wr, out RootImportWriter);
     }
 
     protected override void EmitBuiltInDecls(BuiltIns builtIns, ConcreteSyntaxTree wr) {
@@ -72,27 +70,22 @@ namespace Microsoft.Dafny {
       wr.WriteLine("// Dafny module {0} compiled into Rust", ModuleName);
       wr.WriteLine();
       // This is a non-main module; it only imports things declared before it, so we don't need these writers
-      EmitImports(wr, out _, out _);
+      EmitImports(wr, out _);
       wr.WriteLine();
     }
 
-    void EmitImports(ConcreteSyntaxTree wr, out ConcreteSyntaxTree importWriter, out ConcreteSyntaxTree importDummyWriter) {
-      wr.WriteLine("import (");
+    void EmitImports(ConcreteSyntaxTree wr, out ConcreteSyntaxTree importWriter) {
       importWriter = wr.Fork(1);
-      wr.WriteLine(")");
-      importDummyWriter = wr.Fork();
 
       foreach (var import in Imports) {
-        EmitImport(import, importWriter, importDummyWriter);
+        EmitImport(import, importWriter);
       }
     }
 
     public override void EmitCallToMain(Method mainMethod, string baseName, ConcreteSyntaxTree wr) {
       var companion = TypeName_Companion(UserDefinedType.FromTopLevelDeclWithAllBooleanTypeParameters(mainMethod.EnclosingClass), wr, mainMethod.tok, mainMethod);
 
-      var wBody = wr.NewNamedBlock("func main()");
-      wBody.WriteLine("defer _dafny.CatchHalt()");
-
+      var wBody = wr.NewNamedBlock("fn main()");
       var idName = IssueCreateStaticMain(mainMethod) ? "Main" : IdName(mainMethod);
 
       Coverage.EmitSetup(wBody);
@@ -119,32 +112,23 @@ namespace Microsoft.Dafny {
         return wr;
       }
 
+      // Rust valid module names: https://doc.rust-lang.org/stable/reference/identifiers.html
       string pkgName;
       if (libraryName != null) {
         pkgName = libraryName;
       } else {
-        // Go ignores all filenames starting with underscores.  So we're forced
-        // to rewrite "__default" to "default__".
         pkgName = moduleName;
-        if (pkgName != "" && pkgName.All(c => c == '_')) {
-          Error(Bpl.Token.NoToken, "Cannot have a package name with only underscores: {0}", wr, pkgName);
-          return wr;
-        }
-        while (pkgName.StartsWith("_")) {
-          pkgName = pkgName.Substring(1) + "_";
-        }
       }
 
-      var import = new Import { Name = moduleName, Path = pkgName };
+      var import = new Import { Name = pkgName, Path = pkgName };
       if (isExtern) {
         // Allow the library name to be "" to import built-in things like the error type
         if (pkgName != "") {
-          import.SuppressDummy = true;
           AddImport(import);
         }
         return new ConcreteSyntaxTree(); // ignore contents of extern module
       } else {
-        var filename = string.Format("{0}/{0}.go", pkgName);
+        var filename = string.Format("{0}.rs", pkgName);
         var w = wr.NewFile(filename);
         ModuleName = moduleName;
         EmitModuleHeader(w);
@@ -161,20 +145,16 @@ namespace Microsoft.Dafny {
 
     private void AddImport(Import import) {
       // Import in root module
-      EmitImport(import, RootImportWriter, RootImportDummyWriter);
+      EmitImport(import, RootImportWriter);
       // Import in all subsequent modules
       Imports.Add(import);
     }
 
-    private void EmitImport(Import import, ConcreteSyntaxTree importWriter, ConcreteSyntaxTree importDummyWriter) {
+    private void EmitImport(Import import, ConcreteSyntaxTree importWriter) {
       var id = IdProtect(import.Name);
       var path = import.Path;
 
-      importWriter.WriteLine("{0} \"{1}\"", id, path);
-
-      if (!import.SuppressDummy) {
-        importDummyWriter.WriteLine("var _ {0}.{1}", id, DummyTypeName);
-      }
+      importWriter.WriteLine("use {0} as {1};", path, id);
     }
 
     protected override string GetHelperModuleName() => "_dafny";
