@@ -103,7 +103,7 @@ namespace Microsoft.Dafny {
 
     protected override ConcreteSyntaxTree CreateStaticMain(IClassWriter cw) {
       var wr = ((RustCompiler.ClassWriter)cw).ConcreteMethodWriter;
-      return wr.NewNamedBlock("func (_this * {0}) Main()", FormatCompanionTypeName(((RustCompiler.ClassWriter)cw).ClassName));
+      return wr.NewNamedBlock("fn main() -> {0}", FormatCompanionTypeName(((RustCompiler.ClassWriter)cw).ClassName));
     }
 
     protected override ConcreteSyntaxTree CreateModule(string moduleName, bool isDefault, bool isExtern, string/*?*/ libraryName, ConcreteSyntaxTree wr) {
@@ -214,9 +214,10 @@ namespace Microsoft.Dafny {
 
       var w = CreateDescribedSection("class {0}", wr, name);
 
-      var instanceFieldWriter = w.NewBlock(string.Format("type {0} struct", name));
+      var instanceFieldWriter = w.NewBlock(string.Format("struct {0}", name));
 
       w.WriteLine();
+
       CreateInitializer(name, w, out var instanceFieldInitWriter, out var traitInitWriter, out var rtdParamWriter);
 
       if (typeParameters != null) {
@@ -224,27 +225,27 @@ namespace Microsoft.Dafny {
       }
 
       w.WriteLine();
-      var staticFieldWriter = w.NewNamedBlock("type {0} struct", FormatCompanionTypeName(name));
-      var staticFieldInitWriter = w.NewNamedBlock("var {0} = {1}", FormatCompanionName(name), FormatCompanionTypeName(name));
+      var staticFieldWriter = w.NewNamedBlock("struct {0}", FormatCompanionTypeName(name));
+      var staticFieldInitWriter = w.NewNamedBlock("let {0} = {1}", FormatCompanionName(name), FormatCompanionTypeName(name));
 
       if (includeEquals) {
         // This Equals() is so simple that we could just use == instead, but uniformity is good and it'll get inlined anyway.
 
         w.WriteLine();
-        var wEquals = w.NewNamedBlock("func (_this *{0}) Equals(other *{0}) bool", name);
+        var wEquals = w.NewNamedBlock("fn Equals(_this: &{0}, other: &{0}) -> bool", name);
         wEquals.WriteLine("return _this == other");
 
-        w.WriteLine();
-        var wEqualsGeneric = w.NewNamedBlock("func (_this *{0}) EqualsGeneric(x interface{{}}) bool", name);
+        /*w.WriteLine();
+        var wEqualsGeneric = w.NewNamedBlock("fn EqualsGeneric(_this: &{0}, x: dyn {{}}) -> bool", name);
         wEqualsGeneric.WriteLine("other, ok := x.(*{0})", name);
-        wEqualsGeneric.WriteLine("return ok && _this.Equals(other)");
+        wEqualsGeneric.WriteLine("return ok && _this.Equals(other)");*/
       }
 
       w.WriteLine();
-      var wString = w.NewNamedBlock("func (*{0}) String() string", name);
+      var wString = w.NewNamedBlock("fn String(&self) -> &'static str", name);
       // Be consistent with other back ends, which don't fold _module into the main module
       var module = ModuleName == MainModuleName ? "_module" : ModuleName;
-      wString.WriteLine("return \"{0}.{1}\"", module, name);
+      wString.WriteLine("\"{0}.{1}\"", module, name);
 
       if (includeRtd) {
         ConcreteSyntaxTree wDefault;
@@ -267,10 +268,10 @@ namespace Microsoft.Dafny {
 
         foreach (Type typ in superClasses) {
           // Emit a compile-time sanity check that the class emitted does indeed have the methods required by the parent trait
-          w.WriteLine("var _ {0} = &{1}{{}}", TypeName(typ, w, tok), name);
+          w.WriteLine("let _ {0} = &{1}{{}}", TypeName(typ, w, tok), name);
         }
 
-        w.WriteLine("var _ _dafny.TraitOffspring = &{0}{{}}", name);
+        w.WriteLine("let _ _dafny.TraitOffspring = &{0}{{}}", name);
       }
       return cw;
     }
@@ -307,15 +308,15 @@ namespace Microsoft.Dafny {
       //   ...
       // }
       wr = CreateDescribedSection("trait {0}", wr, name);
-      var abstractMethodWriter = wr.NewNamedBlock("type {0} interface", name);
+      var abstractMethodWriter = wr.NewNamedBlock("pub trait {0}", name);
       var concreteMethodWriter = wr.Fork();
 
       var staticFieldWriter = wr.NewNamedBlock("type {0} struct", FormatCompanionTypeName(name));
-      var staticFieldInitWriter = wr.NewNamedBlock("var {0} = {1}", FormatCompanionName(name), FormatCompanionTypeName(name));
-      var wCastTo = wr.NewNamedBlock("func ({0}) CastTo_(x interface{{}}) {1}", FormatCompanionTypeName(name), name);
-      wCastTo.WriteLine("var t {0}", name);
-      wCastTo.WriteLine("t, _ = x.({0})", name);
-      wCastTo.WriteLine("return t");
+      var staticFieldInitWriter = wr.NewNamedBlock("let {0} = {1}", FormatCompanionName(name), FormatCompanionTypeName(name));
+      //var wCastTo = wr.NewNamedBlock("fn CastTo_(x interface{{}}) {1} -> {0}", FormatCompanionTypeName(name), name);
+      //wCastTo.WriteLine("let t {0}", name);
+      //wCastTo.WriteLine("t, _ = x.{0}", name);
+      //wCastTo.WriteLine("return t");
 
       var cw = new ClassWriter(this, name, isExtern, abstractMethodWriter, concreteMethodWriter, null, null, null, staticFieldWriter, staticFieldInitWriter);
       staticFieldWriter.WriteLine("TraitID_ *_dafny.TraitID");
@@ -324,15 +325,15 @@ namespace Microsoft.Dafny {
     }
 
     protected void CreateInitializer(string name, ConcreteSyntaxTree wr, out ConcreteSyntaxTree instanceFieldInitWriter, out ConcreteSyntaxTree traitInitWriter, out ConcreteSyntaxTree rtdParamWriter) {
-      wr.Write("func {0}(", FormatInitializerName(name));
+      wr.Write("fn {0}(", FormatInitializerName(name));
       rtdParamWriter = wr.Fork();
-      var w = wr.NewNamedBlock(") *{0}", name);
-      w.WriteLine("_this := {0}{{}}", name);
+      var w = wr.NewNamedBlock(") -> {0}", name);
+      w.WriteLine("let _this = {0}{{}}", name);
 
       w.WriteLine();
       instanceFieldInitWriter = w.Fork();
       traitInitWriter = w.Fork();
-      w.WriteLine("return &_this");
+      w.WriteLine("_this");
     }
 
     protected override bool SupportsProperties => false;
@@ -632,7 +633,7 @@ namespace Microsoft.Dafny {
 
       wr.WriteLine();
       var staticFieldWriter = wr.NewNamedBlock("type {0} struct", companionTypeName);
-      var staticFieldInitWriter = wr.NewNamedBlock("var {0} = {1}", FormatCompanionName(name), companionTypeName);
+      var staticFieldInitWriter = wr.NewNamedBlock("let {0} = {1}", FormatCompanionName(name), companionTypeName);
 
       foreach (var ctor in dt.Ctors) {
         var ctorStructName = name + "_" + ctor.CompileName;
@@ -1625,7 +1626,7 @@ namespace Microsoft.Dafny {
     }
 
     private ConcreteSyntaxTree/*?*/ DeclareLocalVar(string name, Type/*?*/ type, Bpl.IToken/*?*/ tok, bool includeRhs, bool leaveRoomForRhs, ConcreteSyntaxTree wr) {
-      wr.Write("var {0}", name);
+      wr.Write("let {0}", name);
 
       if (type != null) {
         // Always specify the type in case the rhs is nil
@@ -1683,7 +1684,7 @@ namespace Microsoft.Dafny {
     }
 
     protected override string GenerateLhsDecl(string target, Type/*?*/ type, ConcreteSyntaxTree wr, Bpl.IToken tok) {
-      return "var " + target;
+      return "let " + target;
     }
 
     // ----- Statements -------------------------------------------------------------
@@ -1867,7 +1868,7 @@ namespace Microsoft.Dafny {
       wBody.WriteLine("if !{0} {{ break }}", okVar);
 
       if (introduceBoundVar) {
-        wBody.WriteLine("var {0} {1}", boundVarName, TypeName(boundVarType, wBody, tok));
+        wBody.WriteLine("let {0} {1}", boundVarName, TypeName(boundVarType, wBody, tok));
       }
       if (boundVarType.IsRefType) {
         var wIf = EmitIf($"_dafny.IsDafnyNull({tmpVarName})", true, wBody);
